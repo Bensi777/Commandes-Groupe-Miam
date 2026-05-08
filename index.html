@@ -988,8 +988,8 @@ async function goToProductSelect() {
         sort: [{field:'Nom Produit', direction:'asc'}]
       }),
       airtableFetch(TABLES.prix, {
-        fields: ['Code Produit Interne','Code Fournisseur','Prix Unitaire HT','Unité','Date'],
-        sort: [{field:'Date', direction:'desc'}]
+        fields: ['Code Interne','Code Fournisseur (à partir de Fournisseur)','Prix HT','Unité','Date Dernière MAJ Prix'],
+        sort: [{field:'Date Dernière MAJ Prix', direction:'desc'}]
       }),
       airtableFetch(TABLES.fournisseurs, {
         fields: ['Code Fournisseur','Nom Fournisseur']
@@ -1007,8 +1007,9 @@ async function goToProductSelect() {
     // Latest prix per (produit × fournisseur)
     const latestPrix = {};
     prixRecs.forEach(r => {
-      const ci = r.fields['Code Produit Interne'];
-      const cf = r.fields['Code Fournisseur'];
+      const ci = r.fields['Code Interne'];
+      const cfArr = r.fields['Code Fournisseur (à partir de Fournisseur)'] || [];
+      const cf = Array.isArray(cfArr) ? cfArr[0] : cfArr;
       const key = ci + '|' + cf;
       if (ci && cf && !latestPrix[key]) latestPrix[key] = r;
     });
@@ -1016,14 +1017,15 @@ async function goToProductSelect() {
     // Build supplier options per product
     const productSuppliers = {};
     Object.values(latestPrix).forEach(r => {
-      const ci = r.fields['Code Produit Interne'];
-      const cf = r.fields['Code Fournisseur'];
+      const ci = r.fields['Code Interne'];
+      const cfArr = r.fields['Code Fournisseur (à partir de Fournisseur)'] || [];
+      const cf = Array.isArray(cfArr) ? cfArr[0] : cfArr;
       if (!ci || !cf) return;
       if (!productSuppliers[ci]) productSuppliers[ci] = [];
       productSuppliers[ci].push({
         codeFournisseur: cf,
         nomFournisseur: fournNomMap[cf] || cf,
-        prix: r.fields['Prix Unitaire HT'] || 0,
+        prix: r.fields['Prix HT'] || 0,
         unite: r.fields['Unité'] || ''
       });
     });
