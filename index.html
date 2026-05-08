@@ -605,7 +605,7 @@
     <div class="date-str" id="home-date">–</div>
   </div>
   <div class="home-actions">
-    <div class="action-card" onclick="goToSuppliers()">
+    <div class="action-card" onclick="goToProductSelect()">
       <div class="action-icon"><i class="fa-solid fa-cart-plus"></i></div>
       <div>
         <div class="action-label">Nouvelle commande</div>
@@ -638,34 +638,18 @@
 <!-- ══════════════════════════════════════════════ -->
 <!-- SCREEN: SUPPLIERS                              -->
 <!-- ══════════════════════════════════════════════ -->
-<div id="screen-suppliers" class="screen">
+<div id="screen-product-select" class="screen">
   <div class="app-header">
     <button class="back-btn" onclick="showScreen('screen-home')"><i class="fa-solid fa-arrow-left"></i></button>
-    <h1>Choisir un fournisseur</h1>
+    <h1>Nouvelle commande</h1>
   </div>
-  <div class="content">
+  <div class="content content-padded-bottom">
     <div class="search-bar">
       <i class="fa-solid fa-magnifying-glass"></i>
-      <input type="text" id="supplier-search" placeholder="Rechercher..." oninput="filterSuppliers()">
+      <input type="text" id="product-search" placeholder="Rechercher un produit…" oninput="filterProducts()">
     </div>
-    <div class="chips-row" id="supplier-chips"></div>
-    <div id="supplier-list"></div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════════ -->
-<!-- SCREEN: ORDER BUILD                            -->
-<!-- ══════════════════════════════════════════════ -->
-<div id="screen-order-build" class="screen">
-  <div class="app-header">
-    <button class="back-btn" onclick="showScreen('screen-suppliers')"><i class="fa-solid fa-arrow-left"></i></button>
-    <div style="flex:1;">
-      <h1 id="build-supplier-name">Fournisseur</h1>
-      <span class="subtitle" id="build-supplier-cat"></span>
-    </div>
-  </div>
-  <div class="content content-padded-bottom" id="build-content">
-    <div class="loading"><div class="spinner"></div><span>Chargement des produits…</span></div>
+    <div class="chips-row" id="product-chips"></div>
+    <div id="product-list"></div>
   </div>
   <button class="cart-fab hidden" id="cart-fab" onclick="goToCart()">
     <i class="fa-solid fa-basket-shopping"></i>
@@ -679,7 +663,7 @@
 <!-- ══════════════════════════════════════════════ -->
 <div id="screen-cart" class="screen">
   <div class="app-header">
-    <button class="back-btn" onclick="showScreen('screen-order-build')"><i class="fa-solid fa-arrow-left"></i></button>
+    <button class="back-btn" onclick="showScreen('screen-product-select')"><i class="fa-solid fa-arrow-left"></i></button>
     <h1>Récapitulatif</h1>
   </div>
   <div class="content" id="cart-content"></div>
@@ -988,204 +972,200 @@ function goHome() {
 }
 
 // ============================================================
-// SUPPLIERS
+// PRODUCT SELECTION (nouvelle commande par produit)
 // ============================================================
-async function goToSuppliers() {
-  showScreen('screen-suppliers');
-  document.getElementById('supplier-list').innerHTML = '<div class="loading"><div class="spinner"></div><span>Chargement…</span></div>';
+let allProductsWithPrices = [];
+let fournNomMap = {};
+let productCatFilter = '';
+
+async function goToProductSelect() {
+  showScreen('screen-product-select');
+  document.getElementById('product-list').innerHTML = '<div class="loading"><div class="spinner"></div><span>Chargement des produits…</span></div>';
   try {
-    const [fournRecs, restoRecs] = await Promise.all([
-      airtableFetch(TABLES.fournisseurs, {
-        fields: ['Code Fournisseur','Nom Fournisseur','Catégorie','Code Client','Restaurants'],
-        sort: [{ field: 'Nom Fournisseur', direction: 'asc' }]
-      }),
-      airtableFetch(TABLES.restaurants, { fields: ['Nom Restaurant'] })
-    ]);
-    restoRecs.forEach(r => { state.restoIdToName[r.id] = r.fields['Nom Restaurant'] || r.id; });
-    state.fournisseursAll = fournRecs;
-    // Deduplicate by Code Fournisseur
-    const seen = {};
-    state.fournisseursUniq = [];
-    fournRecs.forEach(r => {
-      const code = r.fields['Code Fournisseur'];
-      if (code && !seen[code]) { seen[code] = true; state.fournisseursUniq.push(r); }
-    });
-    // Build category chips
-    const cats = [...new Set(fournRecs.map(r => r.fields['Catégorie']).filter(Boolean))].sort();
-    const chipsEl = document.getElementById('supplier-chips');
-    chipsEl.innerHTML = `<div class="chip active" onclick="filterSuppliersByChip('',this)">Tous</div>` +
-      cats.map(c => `<div class="chip" onclick="filterSuppliersByChip('${c}',this)">${c}</div>`).join('');
-    renderSuppliers(state.fournisseursUniq);
-  } catch(e) {
-    document.getElementById('supplier-list').innerHTML = `<div class="empty-state"><i class="fa-solid fa-circle-exclamation"></i><p>Erreur: ${e.message}</p></div>`;
-  }
-}
-
-let supplierCatFilter = '';
-function filterSuppliersByChip(cat, el) {
-  supplierCatFilter = cat;
-  document.querySelectorAll('#supplier-chips .chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  filterSuppliers();
-}
-
-function filterSuppliers() {
-  const q = document.getElementById('supplier-search').value.toLowerCase();
-  const filtered = state.fournisseursUniq.filter(r => {
-    const f = r.fields;
-    const matchQ = !q || (f['Nom Fournisseur']||'').toLowerCase().includes(q) || (f['Catégorie']||'').toLowerCase().includes(q);
-    const matchC = !supplierCatFilter || f['Catégorie'] === supplierCatFilter;
-    return matchQ && matchC;
-  });
-  renderSuppliers(filtered);
-}
-
-function renderSuppliers(list) {
-  const el = document.getElementById('supplier-list');
-  if (!list.length) {
-    el.innerHTML = '<div class="empty-state"><i class="fa-solid fa-box-open"></i><p>Aucun fournisseur trouvé</p></div>';
-    return;
-  }
-  el.innerHTML = list.map(r => {
-    const f = r.fields;
-    const nom = f['Nom Fournisseur'] || '–';
-    const cat = f['Catégorie'] || '';
-    const init = nom.slice(0,2).toUpperCase();
-    return `<div class="supplier-item" onclick="selectSupplier('${esc(f['Code Fournisseur'])}','${esc(nom)}','${esc(cat)}')">
-      <div class="supplier-initial">${init}</div>
-      <div>
-        <div class="supplier-name">${nom}</div>
-        ${cat ? `<div class="supplier-cat">${cat}</div>` : ''}
-      </div>
-      <i class="fa-solid fa-chevron-right supplier-arrow"></i>
-    </div>`;
-  }).join('');
-}
-
-// ============================================================
-// ORDER BUILD
-// ============================================================
-async function selectSupplier(code, nom, cat) {
-  state.supplier = { codeFournisseur: code, nomFournisseur: nom, categorie: cat };
-  state.cart = [];
-  updateCartFab();
-  showScreen('screen-order-build');
-  document.getElementById('build-supplier-name').textContent = nom;
-  document.getElementById('build-supplier-cat').textContent = cat;
-  document.getElementById('build-content').innerHTML = '<div class="loading"><div class="spinner"></div><span>Chargement des produits…</span></div>';
-  try {
-    const [prixRecs, prodRecs] = await Promise.all([
-      airtableFetch(TABLES.prix, {
-        fields: ['Code Fournisseur','Code Produit Interne','Code Produit Fournisseur','Prix Unitaire HT','Unité','Date'],
-        filterByFormula: `{Code Fournisseur}='${code}'`,
-        sort: [{ field: 'Date', direction: 'desc' }]
-      }),
+    const [prodRecs, prixRecs, fournRecs] = await Promise.all([
       airtableFetch(TABLES.produits, {
-        fields: ['Code Interne','Nom Produit','Catégorie','Statut Produit']
+        fields: ['Code Interne','Nom Produit','Catégorie','Statut Produit'],
+        sort: [{field:'Nom Produit', direction:'asc'}]
+      }),
+      airtableFetch(TABLES.prix, {
+        fields: ['Code Produit Interne','Code Fournisseur','Prix Unitaire HT','Unité','Date'],
+        sort: [{field:'Date', direction:'desc'}]
+      }),
+      airtableFetch(TABLES.fournisseurs, {
+        fields: ['Code Fournisseur','Nom Fournisseur']
       })
     ]);
-    // Build produit lookup
-    const prodMap = {};
-    prodRecs.forEach(r => { prodMap[r.fields['Code Interne']] = r.fields; });
-    // Get latest price per product
+
+    // Fournisseur name map (deduplicated)
+    fournNomMap = {};
+    const seenF = {};
+    fournRecs.forEach(r => {
+      const code = r.fields['Code Fournisseur'];
+      if (code && !seenF[code]) { fournNomMap[code] = r.fields['Nom Fournisseur'] || code; seenF[code] = true; }
+    });
+
+    // Latest prix per (produit × fournisseur)
     const latestPrix = {};
     prixRecs.forEach(r => {
-      const codeInt = r.fields['Code Produit Interne'];
-      if (codeInt && !latestPrix[codeInt]) latestPrix[codeInt] = r;
+      const ci = r.fields['Code Produit Interne'];
+      const cf = r.fields['Code Fournisseur'];
+      const key = ci + '|' + cf;
+      if (ci && cf && !latestPrix[key]) latestPrix[key] = r;
     });
-    const products = Object.values(latestPrix).map(r => {
-      const pf = r.fields;
-      const prod = prodMap[pf['Code Produit Interne']] || {};
-      return {
-        codeInterne: pf['Code Produit Interne'],
-        codeFourn:   pf['Code Produit Fournisseur'] || '',
-        nom:         prod['Nom Produit'] || pf['Code Produit Interne'] || '–',
-        cat:         prod['Catégorie'] || '',
-        prix:        pf['Prix Unitaire HT'] || 0,
-        unite:       pf['Unité'] || '',
-        statut:      prod['Statut Produit'] || 'Actif',
-      };
-    }).filter(p => p.statut !== 'Inactif')
-      .sort((a,b) => a.nom.localeCompare(b.nom));
-    renderOrderBuild(products);
+
+    // Build supplier options per product
+    const productSuppliers = {};
+    Object.values(latestPrix).forEach(r => {
+      const ci = r.fields['Code Produit Interne'];
+      const cf = r.fields['Code Fournisseur'];
+      if (!ci || !cf) return;
+      if (!productSuppliers[ci]) productSuppliers[ci] = [];
+      productSuppliers[ci].push({
+        codeFournisseur: cf,
+        nomFournisseur: fournNomMap[cf] || cf,
+        prix: r.fields['Prix Unitaire HT'] || 0,
+        unite: r.fields['Unité'] || ''
+      });
+    });
+
+    // Build final product list (only products that have at least one supplier in mercuriale)
+    allProductsWithPrices = prodRecs
+      .filter(r => r.fields['Statut Produit'] !== 'Inactif' && productSuppliers[r.fields['Code Interne']])
+      .map(r => ({
+        codeInterne: r.fields['Code Interne'],
+        nom: r.fields['Nom Produit'] || r.fields['Code Interne'] || '–',
+        cat: r.fields['Catégorie'] || 'Autres',
+        suppliers: (productSuppliers[r.fields['Code Interne']] || []).sort((a,b) => a.prix - b.prix)
+      }));
+
+    // Category chips
+    const cats = [...new Set(allProductsWithPrices.map(p => p.cat))].sort();
+    const chipsEl = document.getElementById('product-chips');
+    chipsEl.innerHTML = `<div class="chip active" onclick="filterProductsByChip('',this)">Tous</div>` +
+      cats.map(c => `<div class="chip" onclick="filterProductsByChip('${esc(c)}',this)">${c}</div>`).join('');
+
+    renderProducts(allProductsWithPrices);
   } catch(e) {
-    document.getElementById('build-content').innerHTML = `<div class="empty-state"><i class="fa-solid fa-circle-exclamation"></i><p>Erreur: ${e.message}</p></div>`;
+    document.getElementById('product-list').innerHTML = `<div class="empty-state"><i class="fa-solid fa-circle-exclamation"></i><p>Erreur: ${e.message}</p></div>`;
   }
 }
 
-function renderOrderBuild(products) {
-  const content = document.getElementById('build-content');
+function filterProductsByChip(cat, el) {
+  productCatFilter = cat;
+  document.querySelectorAll('#product-chips .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  filterProducts();
+}
+
+function filterProducts() {
+  const q = document.getElementById('product-search').value.toLowerCase().trim();
+  const filtered = allProductsWithPrices.filter(p => {
+    const matchQ = !q || p.nom.toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q);
+    const matchC = !productCatFilter || p.cat === productCatFilter;
+    return matchQ && matchC;
+  });
+  renderProducts(filtered, q);
+}
+
+function renderProducts(products, searchQ) {
+  const el = document.getElementById('product-list');
   if (!products.length) {
-    content.innerHTML = `<div class="empty-state"><i class="fa-solid fa-box-open"></i><p>Aucun produit trouvé pour ce fournisseur</p></div>
-    <button class="new-product-btn" onclick="openModal('modal-new-product')"><i class="fa-solid fa-plus"></i> Ajouter un nouveau produit</button>`;
+    el.innerHTML = `<div class="empty-state"><i class="fa-solid fa-box-open"></i><p>Aucun produit trouvé</p></div>
+    <button class="new-product-btn" onclick="openModal('modal-new-product')"><i class="fa-solid fa-plus"></i> Produit non listé ? L'ajouter ici</button>`;
     return;
   }
-  // Group by category
-  const cats = {};
-  products.forEach(p => {
-    const c = p.cat || 'Autres';
-    if (!cats[c]) cats[c] = [];
-    cats[c].push(p);
-  });
   let html = '';
-  Object.entries(cats).sort().forEach(([cat, prods]) => {
-    html += `<div class="section-title">${cat}</div>`;
-    prods.forEach(p => {
-      const cartItem = state.cart.find(c => c.codeInterne === p.codeInterne);
-      const inCart = !!cartItem;
-      const qteVal = inCart ? cartItem.qte : '';
-      html += `<div class="product-item" id="pi-${p.codeInterne}">
-        <div class="product-row">
-          <div>
-            <div class="product-name">${p.nom} ${inCart ? '<span class="in-cart-dot" style="display:inline-block;"></span>' : ''}</div>
-            ${p.codeFourn ? `<div class="product-code">Réf. fourn: ${p.codeFourn}</div>` : ''}
-          </div>
-          <div class="product-price">${p.prix ? p.prix.toFixed(2)+'€' : '–'}<span class="product-meta"> /${p.unite||'?'}</span></div>
-        </div>
-        <div class="qty-row">
-          <button class="qty-btn" onclick="changeQty('${p.codeInterne}',-1)">−</button>
-          <input class="qty-input" type="number" id="qty-${p.codeInterne}" value="${qteVal}" min="0" step="0.5"
-            onchange="setQty('${p.codeInterne}',this.value,'${esc(p.nom)}','${esc(p.unite)}',${p.prix},'${esc(p.codeFourn)}')"
-            placeholder="0">
-          <span class="qty-unit">${p.unite || ''}</span>
-        </div>
-      </div>`;
+  const grouped = !searchQ && !productCatFilter;
+  if (grouped) {
+    const cats = {};
+    products.forEach(p => { if (!cats[p.cat]) cats[p.cat] = []; cats[p.cat].push(p); });
+    Object.entries(cats).sort().forEach(([cat, prods]) => {
+      html += `<div class="section-title">${cat}</div>`;
+      prods.forEach(p => { html += renderProductItem(p); });
     });
-  });
+  } else {
+    products.forEach(p => { html += renderProductItem(p); });
+  }
   html += `<div style="margin-top:8px;"><button class="new-product-btn" onclick="openModal('modal-new-product')">
     <i class="fa-solid fa-plus"></i> Produit non listé ? L'ajouter ici
   </button></div>`;
-  content.innerHTML = html;
+  el.innerHTML = html;
 }
 
-function changeQty(codeInterne, delta) {
+function renderProductItem(p) {
+  const cartItem = state.cart.find(c => c.codeInterne === p.codeInterne);
+  const inCart = !!cartItem;
+  const qteVal = inCart ? cartItem.qte : '';
+  const best = p.suppliers[0] || {};
+  const supplierOpts = p.suppliers.map(s =>
+    `<option value="${esc(s.codeFournisseur)}" ${inCart && cartItem.codeFournisseur === s.codeFournisseur ? 'selected' : ''}>${esc(s.nomFournisseur)} — ${s.prix ? s.prix.toFixed(2)+'€/'+s.unite : '?'}</option>`
+  ).join('');
+  return `<div class="product-item" id="pi-${p.codeInterne}">
+    <div class="product-row">
+      <div style="flex:1;">
+        <div class="product-name">${p.nom}${inCart ? ' <span class="in-cart-dot" style="display:inline-block;"></span>' : ''}</div>
+        <div class="product-meta">${p.cat}</div>
+      </div>
+      <div class="product-price">${best.prix ? best.prix.toFixed(2)+'€' : '–'}<span class="product-meta"> /${best.unite||'?'}</span></div>
+    </div>
+    ${p.suppliers.length > 1
+      ? `<div style="margin-top:7px;"><select class="form-select" id="fourn-${p.codeInterne}" style="padding:7px 10px;font-size:0.8rem;" onchange="updateCartSupplier('${p.codeInterne}')">${supplierOpts}</select></div>`
+      : `<div style="font-size:0.75rem;color:var(--text-light);margin-top:3px;"><i class="fa-solid fa-truck" style="margin-right:4px;"></i>${best.nomFournisseur||''}</div>`}
+    <div class="qty-row">
+      <button class="qty-btn" onclick="changeProductQty('${p.codeInterne}',-1)">−</button>
+      <input class="qty-input" type="number" id="qty-${p.codeInterne}" value="${qteVal}" min="0" step="0.5"
+        onchange="setProductQty('${p.codeInterne}',this.value)" placeholder="0">
+      <span class="qty-unit">${best.unite||''}</span>
+    </div>
+  </div>`;
+}
+
+function changeProductQty(codeInterne, delta) {
   const input = document.getElementById(`qty-${codeInterne}`);
-  const current = parseFloat(input.value) || 0;
-  const newVal = Math.max(0, current + delta);
+  const newVal = Math.max(0, (parseFloat(input.value) || 0) + delta);
   input.value = newVal || '';
-  input.dispatchEvent(new Event('change'));
+  setProductQty(codeInterne, newVal);
 }
 
-function setQty(codeInterne, val, nom, unite, prix, codeFourn) {
+function setProductQty(codeInterne, val) {
   const qte = parseFloat(val) || 0;
+  const product = allProductsWithPrices.find(p => p.codeInterne === codeInterne);
+  if (!product) return;
+  const selEl = document.getElementById(`fourn-${codeInterne}`);
+  const codeFourn = selEl ? selEl.value : (product.suppliers[0]?.codeFournisseur || '');
+  const supplier = product.suppliers.find(s => s.codeFournisseur === codeFourn) || product.suppliers[0] || {};
   const existing = state.cart.findIndex(c => c.codeInterne === codeInterne);
   if (qte > 0) {
-    if (existing >= 0) {
-      state.cart[existing].qte = qte;
-    } else {
-      state.cart.push({ id: codeInterne, codeInterne, nom, qte, unite, prix, codeFourn, nouveau: false, notes: '' });
-    }
+    const entry = {
+      id: codeInterne, codeInterne, nom: product.nom, qte,
+      unite: supplier.unite || '', prix: supplier.prix || 0,
+      codeFournisseur: supplier.codeFournisseur || '',
+      nomFournisseur: supplier.nomFournisseur || '',
+      codeFourn: supplier.codeFournisseur || '',
+      nouveau: false, notes: ''
+    };
+    if (existing >= 0) state.cart[existing] = entry;
+    else state.cart.push(entry);
   } else {
     if (existing >= 0) state.cart.splice(existing, 1);
   }
   updateCartFab();
 }
 
-function updateCartFab() {
-  const fab = document.getElementById('cart-fab');
-  const count = state.cart.length;
-  document.getElementById('cart-count').textContent = count;
-  fab.classList.toggle('hidden', count === 0);
+function updateCartSupplier(codeInterne) {
+  const existing = state.cart.findIndex(c => c.codeInterne === codeInterne);
+  if (existing < 0) return;
+  const selEl = document.getElementById(`fourn-${codeInterne}`);
+  const codeFourn = selEl ? selEl.value : '';
+  const product = allProductsWithPrices.find(p => p.codeInterne === codeInterne);
+  const supplier = product?.suppliers.find(s => s.codeFournisseur === codeFourn) || {};
+  Object.assign(state.cart[existing], {
+    codeFournisseur: supplier.codeFournisseur || '',
+    nomFournisseur: supplier.nomFournisseur || '',
+    codeFourn: supplier.codeFournisseur || '',
+    prix: supplier.prix || 0,
+    unite: supplier.unite || ''
+  });
 }
 
 // ============================================================
@@ -1217,35 +1197,46 @@ function goToCart() {
 }
 
 function renderCart() {
-  const content = document.getElementById('cart-content');
+  const contentEl = document.getElementById('cart-content');
   if (!state.cart.length) {
-    content.innerHTML = '<div class="empty-state"><i class="fa-solid fa-basket-shopping"></i><p>Votre panier est vide</p></div>';
+    contentEl.innerHTML = '<div class="empty-state"><i class="fa-solid fa-basket-shopping"></i><p>Votre panier est vide</p></div>';
     return;
   }
+  // Group by supplier
+  const bySupplier = {};
+  state.cart.forEach(item => {
+    const key = item.codeFournisseur || '__nouveau__';
+    if (!bySupplier[key]) bySupplier[key] = { nomFournisseur: item.nomFournisseur || 'Nouveaux produits', items: [] };
+    bySupplier[key].items.push(item);
+  });
   const total = state.cart.reduce((s, i) => s + (i.prix * i.qte), 0);
-  let html = `<div class="section-title" style="margin-top:0;">${state.supplier?.nomFournisseur || ''}</div>`;
-  state.cart.forEach((item, idx) => {
-    const lineTotal = item.prix * item.qte;
-    html += `<div class="cart-item">
-      <div class="cart-item-info">
-        <div class="cart-item-name">${item.nom}</div>
-        <div class="cart-item-detail">${item.qte} ${item.unite} ${item.prix ? '× '+item.prix.toFixed(2)+'€' : ''}</div>
-        ${item.nouveau ? '<div class="cart-item-new">🆕 Nouveau produit – à valider</div>' : ''}
-        ${item.notes ? `<div style="font-size:0.75rem;color:var(--text-light);margin-top:2px;">${item.notes}</div>` : ''}
-      </div>
-      ${item.prix ? `<div class="cart-item-price">${lineTotal.toFixed(2)}€</div>` : ''}
-      <button class="cart-remove" onclick="removeFromCart(${idx})"><i class="fa-solid fa-xmark"></i></button>
-    </div>`;
+  let html = '';
+  Object.values(bySupplier).forEach(group => {
+    html += `<div class="section-title" style="margin-top:${html?'14px':'0'};">${group.nomFournisseur}</div>`;
+    group.items.forEach(item => {
+      const idx = state.cart.indexOf(item);
+      const lineTotal = item.prix * item.qte;
+      html += `<div class="cart-item">
+        <div class="cart-item-info">
+          <div class="cart-item-name">${item.nom}</div>
+          <div class="cart-item-detail">${item.qte} ${item.unite}${item.prix ? ' × '+item.prix.toFixed(2)+'€' : ''}</div>
+          ${item.nouveau ? '<div class="cart-item-new">🆕 Nouveau produit – à valider</div>' : ''}
+          ${item.notes ? `<div style="font-size:0.75rem;color:var(--text-light);margin-top:2px;">${item.notes}</div>` : ''}
+        </div>
+        ${item.prix ? `<div class="cart-item-price">${lineTotal.toFixed(2)}€</div>` : ''}
+        <button class="cart-remove" onclick="removeFromCart(${idx})"><i class="fa-solid fa-xmark"></i></button>
+      </div>`;
+    });
   });
   html += `<div class="cart-total-card">
-    <div class="cart-total-label">Total estimé HT</div>
+    <div class="cart-total-label">Total estimé HT (tous fournisseurs)</div>
     <div class="cart-total-amount">${total.toFixed(2)} €</div>
   </div>`;
   html += `<div class="cart-notes">
-    <label class="form-label">Notes pour le fournisseur</label>
+    <label class="form-label">Notes générales</label>
     <textarea id="cart-notes" rows="2" placeholder="Livraison urgente, conditionnement particulier…" class="form-input" style="resize:none;">${cartNotes || ''}</textarea>
   </div>`;
-  content.innerHTML = html;
+  contentEl.innerHTML = html;
 }
 
 let cartNotes = '';
@@ -1253,7 +1244,7 @@ function removeFromCart(idx) {
   state.cart.splice(idx, 1);
   updateCartFab();
   renderCart();
-  if (!state.cart.length) showScreen('screen-order-build');
+  if (!state.cart.length) showScreen('screen-product-select');
 }
 
 // ============================================================
@@ -1266,12 +1257,23 @@ async function validateOrder() {
   btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px;"></div> Enregistrement…';
   const notes = document.getElementById('cart-notes')?.value || '';
   try {
-    const ref  = 'CMD-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(Math.random()*1000).toString().padStart(3,'0');
     const dateStr = new Date().toISOString().slice(0,10);
-    const total = state.cart.reduce((s,i) => s + (i.prix * i.qte), 0);
+    const notes   = document.getElementById('cart-notes')?.value || '';
+
+    // Group cart by supplier
+    const bySupplier = {};
+    state.cart.forEach(item => {
+      const key = item.codeFournisseur || '__nouveau__';
+      if (!bySupplier[key]) bySupplier[key] = {
+        nomFournisseur: item.nomFournisseur || 'Divers', codeFournisseur: item.codeFournisseur || '', items: []
+      };
+      bySupplier[key].items.push(item);
+    });
+    const supplierGroups = Object.values(bySupplier);
+
     // 1. Create "À valider" Produit records for new products
-    const newProductMap = {};
     const nouveaux = state.cart.filter(i => i.nouveau);
+    const newProductMap = {};
     for (const item of nouveaux) {
       const rec = await airtablePost(TABLES.produits, {
         'Code Interne': 'NOUVEAU-' + Date.now(),
@@ -1280,41 +1282,50 @@ async function validateOrder() {
       });
       newProductMap[item.id] = rec.id;
     }
-    // 2. Create Commande
-    const commandeRec = await airtablePost(TABLES.commandes, {
-      'Référence':       ref,
-      'Restaurant':      state.restaurant.nom,
-      'Nom Fournisseur': state.supplier.nomFournisseur,
-      'Code Fournisseur':state.supplier.codeFournisseur,
-      'Date Commande':   dateStr,
-      'Statut':          'Envoyée',
-      'Total HT Estimé': parseFloat(total.toFixed(2)),
-      'Notes':           notes,
-    });
-    // 3. Create Lignes
-    for (const item of state.cart) {
-      await airtablePost(TABLES.lignesCommande, {
-        'Nom Produit':          item.nom,
-        'Commande':             [commandeRec.id],
-        'Code Produit Interne': item.codeInterne || (newProductMap[item.id] ? 'NOUVEAU' : ''),
-        'Code Produit Fournisseur': item.codeFourn,
-        'Quantité':             item.qte,
-        'Unité':                item.unite,
-        'Prix Unitaire HT':     item.prix || 0,
-        'Statut Réception':     'En attente',
-        'Nouveau Produit':      item.nouveau,
-        'Notes Avoir':          item.notes || '',
+
+    // 2. Create one Commande per supplier
+    const refs = [];
+    for (const group of supplierGroups) {
+      const groupTotal = group.items.reduce((s,i) => s + (i.prix * i.qte), 0);
+      const ref = 'CMD-' + dateStr.replace(/-/g,'') + '-' + Math.floor(Math.random()*900+100);
+      refs.push(ref);
+      const commandeRec = await airtablePost(TABLES.commandes, {
+        'Référence':        ref,
+        'Restaurant':       state.restaurant.nom,
+        'Nom Fournisseur':  group.nomFournisseur,
+        'Code Fournisseur': group.codeFournisseur,
+        'Date Commande':    dateStr,
+        'Statut':           'Envoyée',
+        'Total HT Estimé':  parseFloat(groupTotal.toFixed(2)),
+        'Notes':            notes,
       });
+      for (const item of group.items) {
+        await airtablePost(TABLES.lignesCommande, {
+          'Nom Produit':              item.nom,
+          'Commande':                 [commandeRec.id],
+          'Code Produit Interne':     item.codeInterne || '',
+          'Code Produit Fournisseur': item.codeFourn || '',
+          'Quantité':                 item.qte,
+          'Unité':                    item.unite,
+          'Prix Unitaire HT':         item.prix || 0,
+          'Statut Réception':         'En attente',
+          'Nouveau Produit':          item.nouveau,
+          'Notes Avoir':              item.notes || '',
+        });
+      }
     }
-    // 4. Build WhatsApp text
-    state.lastOrderRef  = ref;
-    state.lastOrderText = buildOrderText(ref, dateStr, notes);
+
+    const total = state.cart.reduce((s,i) => s + (i.prix * i.qte), 0);
+    state.lastOrderRef  = refs.join(', ');
+    state.lastOrderText = buildOrderTextMulti(refs, dateStr, supplierGroups, notes);
     state.cart = [];
     updateCartFab();
-    // Show confirmation
+
     document.getElementById('confirmed-text').innerHTML =
-      `Référence : <strong>${ref}</strong><br>Fournisseur : ${state.supplier.nomFournisseur}<br>
-       ${nouveaux.length ? `<span style="color:var(--orange-dark);">⚠️ ${nouveaux.length} nouveau${nouveaux.length>1?'x':''} produit${nouveaux.length>1?'s':''} à valider</span>` : ''}`;
+      `${supplierGroups.length} commande${supplierGroups.length>1?'s':''} créée${supplierGroups.length>1?'s':''}<br>
+       <strong>${refs.join(' · ')}</strong><br>
+       Total estimé : ${total.toFixed(2)}€
+       ${nouveaux.length ? `<br><span style="color:var(--orange-dark);">⚠️ ${nouveaux.length} nouveau${nouveaux.length>1?'x':''} produit${nouveaux.length>1?'s':''} à valider</span>` : ''}`;
     openModal('modal-confirmed');
   } catch(e) {
     showToast('❌ Erreur: ' + e.message, 4000);
@@ -1324,11 +1335,16 @@ async function validateOrder() {
   }
 }
 
-function buildOrderText(ref, dateStr, notes) {
-  const lines = state.cart.length
-    ? state.cart.map(i => `• ${i.qte} ${i.unite} × ${i.nom}${i.prix ? ` (${(i.prix*i.qte).toFixed(2)}€)` : ''}`).join('\n')
-    : 'Voir commande';
-  return `Commande ${ref}\nDate : ${dateStr}\nRestaurant : ${state.restaurant.nom}\nFournisseur : ${state.supplier?.nomFournisseur}\n\n${lines}${notes ? '\n\nNotes : '+notes : ''}`;
+function buildOrderText(ref, dateStr, notes) { return ref; }
+function buildOrderTextMulti(refs, dateStr, groups, notes) {
+  let text = `Commandes Groupe Miam\nDate : ${dateStr}\nRestaurant : ${state.restaurant.nom}\n\n`;
+  groups.forEach((group, i) => {
+    text += `--- ${group.nomFournisseur} (${refs[i]}) ---\n`;
+    text += group.items.map(it => `• ${it.qte} ${it.unite} × ${it.nom}${it.prix ? ' ('+((it.prix*it.qte).toFixed(2))+'€)' : ''}`).join('\n');
+    text += '\n\n';
+  });
+  if (notes) text += `Notes : ${notes}`;
+  return text.trim();
 }
 
 function shareWhatsApp() {
