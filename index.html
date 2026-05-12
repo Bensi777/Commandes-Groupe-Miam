@@ -270,19 +270,19 @@
     .product-code { font-size: 0.7rem; color: var(--text-light); }
     .qty-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
     .qty-btn {
-      width: 34px; height: 34px;
-      border-radius: 8px; border: none;
+      width: 44px; height: 44px;
+      border-radius: 10px; border: none;
       background: var(--green-pale); color: var(--green-dark);
-      font-size: 1.2rem; font-weight: 700;
+      font-size: 1.4rem; font-weight: 700;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
     }
     .qty-btn:active { background: var(--green); color: white; }
     .qty-input {
-      width: 56px; text-align: center;
+      width: 64px; text-align: center;
       border: 1.5px solid var(--border);
-      border-radius: 8px; padding: 5px;
-      font-size: 0.95rem; font-weight: 700;
+      border-radius: 8px; padding: 8px 4px;
+      font-size: 1rem; font-weight: 700;
     }
     .qty-unit { font-size: 0.8rem; color: var(--text-light); flex: 1; }
     .in-cart-dot {
@@ -651,11 +651,13 @@
     <div class="chips-row" id="product-chips"></div>
     <div id="product-list"></div>
   </div>
-  <button class="cart-fab hidden" id="cart-fab" onclick="goToCart()">
-    <i class="fa-solid fa-basket-shopping"></i>
-    Panier
-    <span class="cart-count" id="cart-count">0</span>
-  </button>
+  <div class="bottom-bar" id="cart-bottom-bar">
+    <button class="btn" id="cart-bar-btn" onclick="goToCart()" disabled
+      style="background:#E5E7EB;color:#9CA3AF;cursor:not-allowed;">
+      <i class="fa-solid fa-basket-shopping"></i>
+      <span id="cart-bar-label">Panier vide</span>
+    </button>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════ -->
@@ -1116,7 +1118,7 @@ function renderProductItem(p) {
     <div class="qty-row">
       <button class="qty-btn" onclick="changeProductQty('${p.codeInterne}',-1)">−</button>
       <input class="qty-input" type="number" id="qty-${p.codeInterne}" value="${qteVal}" min="0" step="0.5"
-        onchange="setProductQty('${p.codeInterne}',this.value)" placeholder="0">
+        oninput="setProductQty('${p.codeInterne}',this.value)" placeholder="0">
       <span class="qty-unit">${best.unite||''}</span>
     </div>
   </div>`;
@@ -1188,6 +1190,26 @@ function addNewProduct() {
   closeModal('modal-new-product');
   updateCartFab();
   showToast(`✅ "${nom}" ajouté au panier`);
+}
+
+// ============================================================
+// CART BAR
+// ============================================================
+function updateCartFab() {
+  const count = state.cart.length;
+  const btn = document.getElementById('cart-bar-btn');
+  const label = document.getElementById('cart-bar-label');
+  if (!btn || !label) return;
+  if (count === 0) {
+    btn.disabled = true;
+    btn.style.cssText = 'background:#E5E7EB;color:#9CA3AF;cursor:not-allowed;';
+    label.textContent = 'Panier vide';
+  } else {
+    btn.disabled = false;
+    btn.style.cssText = 'background:var(--green);color:white;';
+    const total = state.cart.reduce((s,i) => s + (i.prix * i.qte), 0);
+    label.textContent = `Voir le panier (${count} produit${count>1?'s':''}) — ${total.toFixed(2)} €`;
+  }
 }
 
 // ============================================================
