@@ -642,21 +642,19 @@
   <div class="app-header">
     <button class="back-btn" onclick="showScreen('screen-home')"><i class="fa-solid fa-arrow-left"></i></button>
     <h1>Nouvelle commande</h1>
+    <button id="cart-bar-btn" onclick="goToCart()" disabled
+      style="background:rgba(255,255,255,0.15);border:none;color:white;border-radius:10px;padding:7px 12px;font-size:0.82rem;font-weight:700;cursor:not-allowed;display:flex;align-items:center;gap:6px;white-space:nowrap;opacity:0.5;">
+      <i class="fa-solid fa-basket-shopping"></i>
+      <span id="cart-bar-label">0</span>
+    </button>
   </div>
-  <div class="content content-padded-bottom">
+  <div class="content">
     <div class="search-bar">
       <i class="fa-solid fa-magnifying-glass"></i>
       <input type="text" id="product-search" placeholder="Rechercher un produit…" oninput="filterProducts()">
     </div>
     <div class="chips-row" id="product-chips"></div>
     <div id="product-list"></div>
-  </div>
-  <div class="bottom-bar" id="cart-bottom-bar">
-    <button class="btn" id="cart-bar-btn" onclick="goToCart()" disabled
-      style="background:#E5E7EB;color:#9CA3AF;cursor:not-allowed;">
-      <i class="fa-solid fa-basket-shopping"></i>
-      <span id="cart-bar-label">Panier vide</span>
-    </button>
   </div>
 </div>
 
@@ -1202,13 +1200,13 @@ function updateCartFab() {
   if (!btn || !label) return;
   if (count === 0) {
     btn.disabled = true;
-    btn.style.cssText = 'background:#E5E7EB;color:#9CA3AF;cursor:not-allowed;';
-    label.textContent = 'Panier vide';
+    btn.style.cssText = 'background:rgba(255,255,255,0.15);border:none;color:white;border-radius:10px;padding:7px 12px;font-size:0.82rem;font-weight:700;cursor:not-allowed;display:flex;align-items:center;gap:6px;white-space:nowrap;opacity:0.5;';
+    label.textContent = '0';
   } else {
     btn.disabled = false;
-    btn.style.cssText = 'background:var(--green);color:white;';
+    btn.style.cssText = 'background:white;border:none;color:var(--blue-dark);border-radius:10px;padding:7px 12px;font-size:0.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;opacity:1;';
     const total = state.cart.reduce((s,i) => s + (i.prix * i.qte), 0);
-    label.textContent = `Voir le panier (${count} produit${count>1?'s':''}) — ${total.toFixed(2)} €`;
+    label.textContent = `${count} · ${total.toFixed(2)} €`;
   }
 }
 
